@@ -12,7 +12,7 @@ fn main() {
     logging::init().unwrap();
     log::info!("Desenho initializing...");
 
-    let mut wayland_state = wayland::DisplayState {  };
+    let mut wayland_state = wayland::DisplayState::new();
     let mut server = wayland_server::Display::<wayland::DisplayState>::new().unwrap();
 
     server.handle().create_global::<wayland::DisplayState, WlCompositor, _>(4, ());

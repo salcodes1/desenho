@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-rustix = "1.1.2"
+rustix = { version = "1.1.2", features = [ "mm" ]}
 drm = "0.14.1"
 vulkano = "0.35.2"
 libudev = "0.3.0"
@@ -12,3 +12,4 @@ calloop = "0.14.3"
 wayland-server = { version = "0.31.10", features = ["log"] }
 wayland-protocols = { version = "0.32.9", features = ["server"] }
 log = "0.4.29"
+image = "0.25.9"

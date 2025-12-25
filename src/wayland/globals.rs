@@ -23,7 +23,7 @@ impl GlobalDispatch<WlShm, ()> for DisplayState {
         global_data: &(),
         data_init: &mut wayland_server::DataInit<'_, Self>,
     ) {
-        let shm = data_init.init(resource, shm::ShmState {});
+        let shm = data_init.init(resource, ());
 
         shm.format(Format::Argb8888);
         shm.format(Format::Xrgb8888);

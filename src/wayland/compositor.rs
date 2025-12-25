@@ -22,7 +22,7 @@ impl Dispatch<WlCompositor, CompositorState> for DisplayState {
     ) {
         match request {
             wayland_server::protocol::wl_compositor::Request::CreateSurface { id } => {
-                data_init.init(id, surface::SurfaceState {});
+                data_init.init(id, ());
             }
             wayland_server::protocol::wl_compositor::Request::CreateRegion { id } => {
                 data_init.init(id, region::RegionState {});
