@@ -13,3 +13,6 @@ wayland-server = { version = "0.31.10", features = ["log"] }
 wayland-protocols = { version = "0.32.9", features = ["server"] }
 log = "0.4.29"
 image = "0.25.9"
+winit = "0.30.12"
+anyhow = "1.0.100"
+vulkano-shaders = "0.35.0"
