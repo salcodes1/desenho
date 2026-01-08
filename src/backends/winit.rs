@@ -1,8 +1,9 @@
 use crate::{
-    backends::{self, PresentBackend},
+    backends::{self, PresentBackend, surface::SurfacePresent},
     vulkan::{self},
 };
 use std::sync::Arc;
+use vulkano::{command_buffer::PrimaryCommandBufferAbstract, swapchain::Surface, sync::GpuFuture};
 use winit::{application::ApplicationHandler, window::WindowAttributes};
 
 pub(crate) struct WinitBackend {
@@ -11,9 +12,9 @@ pub(crate) struct WinitBackend {
 }
 
 pub(crate) struct WinitApp {
-    vulkan_renderer: Arc<vulkan::VulkanRenderer>,
+    pub(crate) vulkan_renderer: Arc<vulkan::VulkanRenderer>,
     window: Option<Arc<winit::window::Window>>,
-    surface_present: Option<backends::surface::SurfacePresent>,
+    pub(crate) surface_present: Option<backends::surface::SurfacePresent>,
 }
 
 impl WinitBackend {
@@ -45,6 +46,15 @@ impl ApplicationHandler for WinitApp {
                 .create_window(WindowAttributes::default())
                 .unwrap(),
         ));
+
+        self.surface_present = Some(SurfacePresent::new(
+            self.vulkan_renderer.clone(),
+            Surface::from_window(
+                self.vulkan_renderer.instance.clone(),
+                self.window.as_ref().unwrap().clone(),
+            )
+            .unwrap(),
+        ));
     }
 
     fn window_event(
@@ -58,8 +68,11 @@ impl ApplicationHandler for WinitApp {
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
-                    // renderer.empty_frame();
-                    // self.window.as_ref().unwrap().request_redraw();
+                if let Some(surface_present) = self.surface_present.as_mut() {
+                    surface_present.set_extent(self.window.as_ref().unwrap().inner_size().width, self.window.as_ref().unwrap().inner_size().height);
+                }
+                // renderer.empty_frame();
+                // self.window.as_ref().unwrap().request_redraw();
             }
             _ => {}
         }
@@ -75,10 +88,6 @@ impl PresentBackend for WinitBackend {
 
 impl PresentBackend for WinitApp {
     fn acquire_frame(&mut self) -> anyhow::Result<super::AcquiredFrame> {
-        self.surface_present
-            .as_mut()
-            .unwrap()
-            .acquire_frame()
+        self.surface_present.as_mut().unwrap().acquire_frame()
     }
 }
-

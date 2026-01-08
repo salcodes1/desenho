@@ -46,7 +46,9 @@ impl SurfacePresent {
 
     pub fn set_extent(&mut self, width: u32, height: u32) {
         self.swapchain_create_info.image_extent = [width, height];
-
+        let (new_swapchain, new_images) = self.swapchain.recreate(self.swapchain_create_info.clone()).unwrap();
+        self.swapchain = new_swapchain;
+        self.images = new_images;
     }
 }
 
@@ -59,7 +61,15 @@ impl crate::backends::PresentBackend for SurfacePresent {
         // Create an ImageView for this image
         let view = ImageView::new(
             self.images[idx as usize].clone(),
-            ImageViewCreateInfo::default(),
+            ImageViewCreateInfo {
+                format: self.swapchain.image_format(),
+                subresource_range: vulkano::image::ImageSubresourceRange {
+                    aspects: vulkano::image::ImageAspects::COLOR,
+                    mip_levels: 0..1,
+                    array_layers: 0..1,
+                },
+                ..Default::default()
+            },
         )?;
 
         // Use the actual swapchain extent (in case it changed)

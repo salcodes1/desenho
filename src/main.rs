@@ -13,6 +13,7 @@ use calloop::{
 };
 use rustix::{event, fd::AsRawFd};
 use vulkano::swapchain::Surface;
+use vulkano::sync::GpuFuture;
 use wayland_protocols::xdg::shell::server::xdg_wm_base::XdgWmBase;
 use wayland_server::{
     ListeningSocket,
@@ -25,7 +26,10 @@ use winit::{
     window::WindowAttributes,
 };
 
-use crate::{backends::winit::WinitBackend, vulkan::VulkanRenderer};
+use crate::{
+    backends::{PresentBackend, winit::WinitBackend},
+    vulkan::{VulkanRenderer, content::SurfaceContent},
+};
 
 mod backends;
 mod geometry;
@@ -77,15 +81,13 @@ fn main() {
         .insert_source(
             Timer::from_duration(Duration::from_millis(0)),
             move |_, _, state| {
-                let status = state
-                    .winit_backend
-                    .winit_loop
-                    .pump_app_events(Some(Duration::from_millis(0)), &mut state.winit_backend.winit_app);
+                let status = state.winit_backend.winit_loop.pump_app_events(
+                    Some(Duration::from_millis(0)),
+                    &mut state.winit_backend.winit_app,
+                );
 
                 match status {
-                    PumpStatus::Continue => {
-                        TimeoutAction::ToDuration(Duration::from_millis(0))
-                    }
+                    PumpStatus::Continue => TimeoutAction::ToDuration(Duration::from_millis(0)),
                     PumpStatus::Exit(_) => {
                         log::info!("Winit event loop exiting");
                         TimeoutAction::Drop
@@ -121,6 +123,36 @@ fn main() {
                     .dispatch_clients(&mut state.wayland_display)
                     .unwrap();
                 state.wayland_server.flush_clients().unwrap();
+                TimeoutAction::ToDuration(Duration::from_millis(0))
+            },
+        )
+        .unwrap();
+
+    loop_handle
+        .insert_source(
+            Timer::from_duration(Duration::from_millis(0)),
+            move |_, _, state| {
+                if let Some(surface_present) = &mut state.winit_backend.winit_app.surface_present {
+                    let acquired_frame = surface_present.acquire_frame().unwrap();
+
+                    let renderer = &state.vulkan_renderer;
+                    let image = acquired_frame.view.clone();
+                    let cmd_buffer = renderer.render_output_surfaces_commands(
+                        image,
+                        state.wayland_display.surfaces.values(),
+                        &state.wayland_display
+                    );
+
+                    let future = acquired_frame
+                        .ready
+                        .then_execute(renderer.queue.clone(), cmd_buffer)
+                        .unwrap();
+
+                    let presented_future = (acquired_frame.present)(future.boxed());
+                    presented_future
+                        .then_signal_fence_and_flush()
+                        .unwrap();
+                }
                 TimeoutAction::ToDuration(Duration::from_millis(0))
             },
         )

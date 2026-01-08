@@ -1,8 +1,8 @@
 use wayland_server::{WEnum, protocol::{wl_callback::WlCallback, wl_surface}};
 
-use crate::wayland::*;
+use crate::{vulkan::content::SurfaceContent, wayland::*};
 
-pub struct SurfaceState {
+pub(crate) struct SurfaceState {
     pub current_buffer: Option<WlBuffer>,
     pub pending_buffer: Option<WlBuffer>,
     pub frame_callback: Option<WlCallback>,
@@ -29,35 +29,6 @@ impl SurfaceState {
         self.current_buffer = self.pending_buffer.take();
     }
 
-    pub fn save_buffer_png(&self, state: &DisplayState) {
-        if let Some(buffer) = &self.current_buffer {
-            let buffer = buffer.data::<shm::BufferState>().unwrap();
-            let pool = state.shm.pools.get(&buffer.pool).unwrap();
-            let offset = buffer.offset as isize;
-            let width = buffer.width as isize;
-            let height = buffer.height as isize;
-            let stride = buffer.stride as isize;
-            let data_ptr = unsafe { pool.loc.offset(offset) as *const u8 };
-            let format = buffer.format;
-            // Use the image crate to save the buffer as a PNG
-            let mut img_buf = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::new(buffer.width as u32, buffer.height as u32);
-            for y in 0..height {
-                for x in 0..width {
-                    let pixel_offset = y * stride + x * 4;
-                    let pixel_ptr = unsafe { data_ptr.offset(pixel_offset) };
-                    let pixel = unsafe {std::slice::from_raw_parts(pixel_ptr, 4)};
-                    let (r, g, b, a) = match format {
-                        WEnum::Value(Format::Argb8888) => (pixel[0], pixel[1], pixel[2], pixel[3]),
-                        WEnum::Value(Format::Xrgb8888) => (pixel[1], pixel[2], pixel[3], 255),
-                        _ => (0, 0, 0, 0), // Unsupported format
-                    };
-                    img_buf.put_pixel(x as u32, y as u32, image::Rgba([r, g, b, a]));
-                }
-            }
-            img_buf.save("output.png").unwrap();
-            self.frame_callback.as_ref().map(|cb| cb.done(0));
-        }
-    }
 }
 
 impl Dispatch<WlSurface, ()> for DisplayState {
@@ -96,7 +67,6 @@ impl Dispatch<WlSurface, ()> for DisplayState {
             wl_surface::Request::Commit => {
                 log::warn!("wl_surface commit");
                 state.get_surface_state_mut(resource.id()).commit();
-                state.get_surface_state(resource.id()).save_buffer_png(state);
             },
             wl_surface::Request::SetBufferTransform { transform } => {
                 log::warn!("wl_surface set buffer transform: {:?}", transform);

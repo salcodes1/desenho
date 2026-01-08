@@ -19,17 +19,17 @@ use wayland_server::{
 
 use crate::wayland::shm::ShmState;
 
-mod callback;
-mod compositor;
-mod globals;
-mod region;
-mod shm;
-mod surface;
-mod xdg;
+pub(crate) mod callback;
+pub(crate) mod compositor;
+pub(crate) mod globals;
+pub(crate) mod region;
+pub(crate) mod shm;
+pub(crate) mod surface;
+pub(crate) mod xdg;
 
 pub struct DisplayState {
-    surfaces: HashMap<ObjectId, surface::SurfaceState>,
-    shm: ShmState,
+    pub surfaces: HashMap<ObjectId, surface::SurfaceState>,
+    pub(crate) shm: ShmState,
 }
 
 // pub struct ObjRef<R: Resource + 'static> {
