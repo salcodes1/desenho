@@ -151,7 +151,8 @@ fn main() {
                     let presented_future = (acquired_frame.present)(future.boxed());
                     presented_future
                         .then_signal_fence_and_flush()
-                        .unwrap();
+                        .unwrap()
+                        .cleanup_finished();
                 }
                 TimeoutAction::ToDuration(Duration::from_millis(0))
             },

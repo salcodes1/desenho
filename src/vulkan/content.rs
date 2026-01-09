@@ -16,10 +16,10 @@ use vulkano::{
         sampler::{Sampler, SamplerCreateInfo},
         view::ImageView,
     },
-    memory::allocator::{AllocationCreateInfo, MemoryTypeFilter},
+    memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo, graphics::{GraphicsPipelineCreateInfo, color_blend::{AttachmentBlend, ColorBlendAttachmentState, ColorBlendState}, input_assembly::InputAssemblyState, multisample::MultisampleState, rasterization::RasterizationState, subpass::PipelineSubpassType, vertex_input::VertexInputState, viewport::{Scissor, Viewport, ViewportState}}, layout::PipelineLayoutCreateInfo}, render_pass::Subpass,
 };
 
-use crate::vulkan::VulkanRenderer;
+use crate::vulkan::{VulkanRenderer, shaders};
 
 pub(crate) struct SurfaceContent {
     pub renderer: Arc<VulkanRenderer>,
@@ -29,6 +29,7 @@ pub(crate) struct SurfaceContent {
     pub descriptor_set: Arc<DescriptorSet>,
     pub descriptor_set_layout: Arc<DescriptorSetLayout>,
     pub staging_buffer: Subbuffer<[u8]>,
+    pub pipeline: Arc<GraphicsPipeline>,
 }
 
 impl SurfaceContent {
@@ -38,9 +39,9 @@ impl SurfaceContent {
         wl_format: wayland_server::protocol::wl_shm::Format,
     ) -> Arc<Self> {
         let format = match wl_format {
-            wayland_server::protocol::wl_shm::Format::Argb8888 => Format::B8G8R8A8_UNORM,
-            wayland_server::protocol::wl_shm::Format::Xrgb8888 => Format::B8G8R8A8_UNORM,
-            _ => Format::R8G8B8A8_UNORM,
+            wayland_server::protocol::wl_shm::Format::Argb8888 => Format::B8G8R8A8_SRGB,
+            wayland_server::protocol::wl_shm::Format::Xrgb8888 => Format::B8G8R8A8_SRGB,
+            _ => Format::B8G8R8A8_SRGB,
         };
 
         let image = Image::new(
@@ -121,6 +122,69 @@ impl SurfaceContent {
         )
         .unwrap();
 
+        let vs = shaders::vertex::load(renderer.device.clone()).unwrap();
+        let fs = shaders::fragment::load(renderer.device.clone()).unwrap();
+
+        let layout = PipelineLayout::new(
+            renderer.device.clone(),
+            PipelineLayoutCreateInfo {
+                set_layouts: vec![descriptor_set_layout.clone()],
+                push_constant_ranges: vec![],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let pipeline = GraphicsPipeline::new(
+            renderer.device.clone(),
+            None,
+            GraphicsPipelineCreateInfo {
+                stages: vec![
+                    PipelineShaderStageCreateInfo::new(vs.entry_point("main").unwrap()),
+                    PipelineShaderStageCreateInfo::new(fs.entry_point("main").unwrap()),
+                ]
+                .into(),
+                vertex_input_state: Some(VertexInputState::new()),
+                input_assembly_state: Some(InputAssemblyState::default()),
+                viewport_state: Some(ViewportState {
+                    viewports: vec![Viewport {
+                        offset: [0.0, 0.0],
+                        extent: [extent[0] as f32, extent[1] as f32],
+                        depth_range: 0.0..=1.0,
+                    }]
+                    .into(),
+                    scissors: vec![Scissor {
+                        offset: [0, 0],
+                        extent: [extent[0], extent[1]],
+                    }]
+                    .into(),
+                    ..Default::default()
+                }),
+                rasterization_state: Some(RasterizationState::default()),
+                multisample_state: Some(MultisampleState::default()),
+                color_blend_state: Some(ColorBlendState {
+                    attachments: vec![ColorBlendAttachmentState {
+                        blend: Some(AttachmentBlend {
+                            src_color_blend_factor: vulkano::pipeline::graphics::color_blend::BlendFactor::One,
+                            dst_color_blend_factor: vulkano::pipeline::graphics::color_blend::BlendFactor::OneMinusSrcAlpha,
+                            color_blend_op: vulkano::pipeline::graphics::color_blend::BlendOp::Add,
+                            src_alpha_blend_factor: vulkano::pipeline::graphics::color_blend::BlendFactor::One,
+                            dst_alpha_blend_factor: vulkano::pipeline::graphics::color_blend::BlendFactor::Zero,
+                            alpha_blend_op: vulkano::pipeline::graphics::color_blend::BlendOp::Add,
+                        }),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+                depth_stencil_state: None,
+                subpass: Some(PipelineSubpassType::BeginRenderPass(
+                    Subpass::from(renderer.render_pass.clone(), 0).unwrap(),
+                )),
+                ..GraphicsPipelineCreateInfo::layout(layout)
+            },
+        )
+        .unwrap();
+
         Arc::new(Self {
             renderer,
             image,
@@ -129,6 +193,7 @@ impl SurfaceContent {
             descriptor_set,
             descriptor_set_layout,
             staging_buffer,
+            pipeline,
         })
     }
 }

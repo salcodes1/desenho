@@ -41,6 +41,7 @@ pub(crate) struct VulkanRenderer {
     pub(crate) cmd_allocator: Arc<StandardCommandBufferAllocator>,
     pub(crate) descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     pub(crate) general_memory_allocator: Arc<StandardMemoryAllocator>,
+    pub(crate) render_pass: Arc<RenderPass>,
 }
 
 impl VulkanRenderer {
@@ -102,102 +103,9 @@ impl VulkanRenderer {
 
         let general_memory_allocator =
             Arc::new(StandardMemoryAllocator::new_default(device.clone()));
-        Arc::new(VulkanRenderer {
-            instance,
-            device,
-            queue,
-            cmd_allocator,
-            descriptor_set_allocator,
-            general_memory_allocator,
-        })
-    }
-
-    fn make_pipeline(
-        &self,
-        render_pass: Arc<RenderPass>,
-        content: Arc<SurfaceContent>,
-    ) -> Arc<GraphicsPipeline> {
-        let vs = shaders::vertex::load(self.device.clone()).unwrap();
-        let fs = shaders::fragment::load(self.device.clone()).unwrap();
-
-        let layout = PipelineLayout::new(
-            self.device.clone(),
-            PipelineLayoutCreateInfo {
-                set_layouts: vec![content.descriptor_set_layout.clone()],
-                push_constant_ranges: vec![],
-                ..Default::default()
-            },
-        )
-        .unwrap();
-
-        let pipeline = GraphicsPipeline::new(
-            self.device.clone(),
-            None,
-            GraphicsPipelineCreateInfo {
-                stages: vec![
-                    PipelineShaderStageCreateInfo::new(vs.entry_point("main").unwrap()),
-                    PipelineShaderStageCreateInfo::new(fs.entry_point("main").unwrap()),
-                ]
-                .into(),
-                vertex_input_state: Some(VertexInputState::new()),
-                input_assembly_state: Some(InputAssemblyState::default()),
-                viewport_state: Some(ViewportState {
-                    viewports: vec![Viewport {
-                        offset: [0.0, 0.0],
-                        extent: [800.0, 600.0],
-                        depth_range: 0.0..=1.0,
-                    }]
-                    .into(),
-                    scissors: vec![Scissor {
-                        offset: [0, 0],
-                        extent: [800, 600],
-                    }]
-                    .into(),
-                    ..Default::default()
-                }),
-                rasterization_state: Some(RasterizationState::default()),
-                multisample_state: Some(MultisampleState::default()),
-                color_blend_state: Some(ColorBlendState {
-                    attachments: vec![ColorBlendAttachmentState {
-                        blend: Some(AttachmentBlend {
-                            src_color_blend_factor: vulkano::pipeline::graphics::color_blend::BlendFactor::SrcAlpha,
-                            dst_color_blend_factor: vulkano::pipeline::graphics::color_blend::BlendFactor::OneMinusSrcAlpha,
-                            color_blend_op: vulkano::pipeline::graphics::color_blend::BlendOp::Add,
-                            src_alpha_blend_factor: vulkano::pipeline::graphics::color_blend::BlendFactor::One,
-                            dst_alpha_blend_factor: vulkano::pipeline::graphics::color_blend::BlendFactor::Zero,
-                            alpha_blend_op: vulkano::pipeline::graphics::color_blend::BlendOp::Add,
-                        }),
-                        ..Default::default()
-                    }],
-                    ..Default::default()
-                }),
-                depth_stencil_state: None,
-                subpass: Some(PipelineSubpassType::BeginRenderPass(
-                    Subpass::from(render_pass, 0).unwrap(),
-                )),
-                ..GraphicsPipelineCreateInfo::layout(layout)
-            },
-        )
-        .unwrap();
-
-        pipeline
-    }
-
-    pub fn render_output_surfaces_commands<'a>(
-        self: &Arc<Self>,
-        target_view: Arc<vulkano::image::view::ImageView>,
-        surfaces: impl IntoIterator<Item = &'a SurfaceState>,
-        state: &DisplayState,
-    ) -> Arc<PrimaryAutoCommandBuffer> {
-        let mut builder = AutoCommandBufferBuilder::primary(
-            self.cmd_allocator.clone(),
-            self.queue.queue_family_index(),
-            vulkano::command_buffer::CommandBufferUsage::OneTimeSubmit,
-        )
-        .unwrap();
 
         let render_pass = RenderPass::new(
-            self.device.clone(),
+            device.clone(),
             RenderPassCreateInfo {
                 attachments: vec![AttachmentDescription {
                     format: vulkano::format::Format::B8G8R8A8_SRGB,
@@ -220,9 +128,35 @@ impl VulkanRenderer {
             },
         )
         .unwrap();
+        Arc::new(VulkanRenderer {
+            instance,
+            device,
+            queue,
+            cmd_allocator,
+            descriptor_set_allocator,
+            general_memory_allocator,
+            render_pass,
+        })
+    }
+
+
+    pub fn render_output_surfaces_commands<'a>(
+        self: &Arc<Self>,
+        target_view: Arc<vulkano::image::view::ImageView>,
+        surfaces: impl IntoIterator<Item = &'a SurfaceState>,
+        state: &DisplayState,
+    ) -> Arc<PrimaryAutoCommandBuffer> {
+        let mut builder = AutoCommandBufferBuilder::primary(
+            self.cmd_allocator.clone(),
+            self.queue.queue_family_index(),
+            vulkano::command_buffer::CommandBufferUsage::OneTimeSubmit,
+        )
+        .unwrap();
+
+
 
         let fb = Framebuffer::new(
-            render_pass.clone(),
+            self.render_pass.clone(),
             FramebufferCreateInfo {
                 attachments: vec![target_view],
                 ..Default::default()
@@ -299,20 +233,18 @@ impl VulkanRenderer {
             .unwrap();
 
         for content in contents {
-            let pipeline = self.make_pipeline(render_pass.clone(), content.clone());
-
             unsafe {
                 builder
-                    .bind_pipeline_graphics(pipeline.clone())
+                    .bind_pipeline_graphics(content.pipeline.clone())
                     .unwrap()
                     .bind_descriptor_sets(
                         vulkano::pipeline::PipelineBindPoint::Graphics,
-                        pipeline.layout().clone(),
+                        content.pipeline.layout().clone(),
                         0,
                         content.descriptor_set.clone(),
                     )
                     .unwrap()
-                    .draw(6, 1, 0, 0)
+                    .draw(3, 1, 0, 0)
                     .unwrap()
             };
         }
