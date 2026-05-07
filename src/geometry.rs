@@ -1,9 +1,11 @@
+#[derive(Clone, Copy, Debug)]
 struct Physical;
+#[derive(Clone, Copy, Debug)]
 struct Logical;
 
 
-
-struct Rect<C> {
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Rect<C: Clone + Copy> {
     pub x: i32,
     pub y: i32,
     pub width: u32,
@@ -32,5 +34,32 @@ impl Rect<Logical> {
             height: (self.height as f64 * scale_factor) as u32,
             _marker: std::marker::PhantomData,
         }
+    }
+}
+
+pub(crate) struct Region<C: Clone + Copy> {
+    pub ops: Vec<RegionOp<C>>,
+}
+
+enum RegionOp<C: Clone + Copy> {
+    Add(Rect<C>),
+    Subtract(Rect<C>),
+}
+
+impl<C: Clone + Copy> Region<C> {
+    pub fn new() -> Self {
+        Self { ops: Vec::new() }
+    }
+
+    pub fn add_rect(&mut self, rect: &Rect<C>) {
+        self.ops.push(RegionOp::Add(*rect));
+    }
+
+    pub fn subtract_rect(&mut self, rect: &Rect<C>) {
+        self.ops.push(RegionOp::Subtract(*rect));
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.ops.is_empty()
     }
 }

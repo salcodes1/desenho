@@ -133,7 +133,14 @@ fn main() {
             Timer::from_duration(Duration::from_millis(0)),
             move |_, _, state| {
                 if let Some(surface_present) = &mut state.winit_backend.winit_app.surface_present {
-                    let acquired_frame = surface_present.acquire_frame().unwrap();
+                    let acquired_frame = surface_present.acquire_frame();
+
+                    if acquired_frame.is_err() {
+                        log::warn!("Failed to acquire frame for presentation");
+                        return TimeoutAction::ToDuration(Duration::from_millis(16));
+                    }
+
+                    let acquired_frame = acquired_frame.unwrap();
 
                     let renderer = &state.vulkan_renderer;
                     let image = acquired_frame.view.clone();

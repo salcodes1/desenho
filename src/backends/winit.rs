@@ -4,7 +4,7 @@ use crate::{
 };
 use std::sync::Arc;
 use vulkano::{command_buffer::PrimaryCommandBufferAbstract, swapchain::Surface, sync::GpuFuture};
-use winit::{application::ApplicationHandler, window::WindowAttributes};
+use winit::{application::ApplicationHandler, dpi::PhysicalSize, window::WindowAttributes};
 
 pub(crate) struct WinitBackend {
     pub(crate) winit_app: WinitApp,
